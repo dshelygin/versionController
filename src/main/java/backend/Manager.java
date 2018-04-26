@@ -4,7 +4,6 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorSelection;
 import akka.actor.Props;
 
-
 import backend.data.requests.GetLastClassVersionData;
 import backend.data.requests.RegisterClassVersionData;
 import backend.data.messages.MessageDescription;
@@ -19,7 +18,7 @@ import java.util.Random;
  * Менеджер для сообщений, приходящих на бэкенд
  */
 public class Manager  extends AbstractActor {
-    final static Logger logger = Logger.getLogger(Manager.class);
+    private final static Logger logger = Logger.getLogger(Manager.class);
     private final static Integer START_REGISTER_NUBMER = 3;
     private Integer registerNumber = 0;
     //поддержка повторной пересылки сообщений.
@@ -29,7 +28,7 @@ public class Manager  extends AbstractActor {
         return Props.create(Manager.class, () -> new Manager());
     }
 
-    public  Manager(){
+    private  Manager(){
         for (int i = 0; i < START_REGISTER_NUBMER; i++) {
             getContext().actorOf(Props.create(Register.class), "Register_" + i);
             registerNumber++;
@@ -53,7 +52,7 @@ public class Manager  extends AbstractActor {
     }
 
     static public class GetLastClassVersion extends VersionMessages {
-        public final GetLastClassVersionData getLastClassVersionData;
+        private final GetLastClassVersionData getLastClassVersionData;
         public GetLastClassVersion(Integer id, GetLastClassVersionData getLastClassVersionData) {
             super(id);
             this.getLastClassVersionData = getLastClassVersionData;
@@ -71,19 +70,10 @@ public class Manager  extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(RegisterClassVersion.class, message -> {
-                    forwardToRegister(message);
-                })
-                .match(GetLastClassVersion.class, message -> {
-                    forwardToRegister(message);
-                })
-                .match(RegisterClassVersionResult.class, message -> {
-                    receivedFromRegister(message);
-
-                })
-                .match(GetLastClassVersionResult.class, message -> {
-                    receivedFromRegister(message);
-                })
+                .match(RegisterClassVersion.class, message ->  forwardToRegister(message))
+                .match(GetLastClassVersion.class, message ->   forwardToRegister(message))
+                .match(RegisterClassVersionResult.class, message ->  receivedFromRegister(message))
+                .match(GetLastClassVersionResult.class, message ->  receivedFromRegister(message))
                 .matchAny(o -> logger.info("Manager received unknown message"))
                 .build();
     }

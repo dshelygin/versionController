@@ -28,6 +28,7 @@ import frontend.data.User;
 import frontend.data.VSession;
 
 
+import frontend.services.auth.AuthManager.*;
 import org.apache.log4j.Logger;
 import akka.util.Timeout;
 import scala.concurrent.duration.Duration;
@@ -40,12 +41,14 @@ import java.util.concurrent.TimeUnit;
 
 
 /**
- * Created by dshelygin on 21.04.2018.
+ *  Маршрутизатор URL запросов
  */
-public class Router extends HttpSessionAwareDirectives<VSession> {
+class Router extends HttpSessionAwareDirectives<VSession> {
     final private ActorRef manager;
-    final static Logger logger = Logger.getLogger(Router.class);
+    final private ActorRef authManager;
+    final private static Logger logger = Logger.getLogger(Router.class);
     private MesageIdGenerator mesageIdGenerator = MesageIdGenerator.INSTANCE;
+    private Timeout timeout = new Timeout(Duration.create(5, TimeUnit.SECONDS));
 
     private static final String SECRET = "sdfs23xcvisdfu290834890jsaklfdgjp[asues0igojdsflgm23i90jasdg;d'gkdpofgikdfgdfj324590-jsdfs";
     private static final SessionEncoder<VSession> BASIC_ENCODER = new BasicSessionEncoder<>(VSession.getSerializer());
@@ -54,12 +57,14 @@ public class Router extends HttpSessionAwareDirectives<VSession> {
     private SetSessionTransport sessionTransport;
     private CheckHeader<VSession> checkHeader;
 
-    public Router(ActorRef manager, MessageDispatcher dispatcher) {
+
+    Router(ActorRef manager, ActorRef authManager, MessageDispatcher dispatcher) {
         super(new SessionManager<>(
                 SessionConfig.defaultConfig(SECRET),
                 BASIC_ENCODER
         ));
         this.manager = manager;
+        this.authManager = authManager;
         refreshable = new Refreshable(getSessionManager(), REFRESH_TOKEN_STORAGE, dispatcher);
         sessionTransport = HeaderST;
         checkHeader = new CheckHeader<>(getSessionManager());
@@ -74,9 +79,9 @@ public class Router extends HttpSessionAwareDirectives<VSession> {
         }
     };
 
-    Timeout timeout = new Timeout(Duration.create(5, TimeUnit.SECONDS));
 
-    public Route routes() {
+
+    Route routes() {
         return  route (
 
             route (pathPrefix("api", () ->
@@ -117,14 +122,27 @@ public class Router extends HttpSessionAwareDirectives<VSession> {
         return
              entity(Jackson.unmarshaller(User.class), user -> {
                     logger.info("Logging in " + user.getUsername());
-                    return setSession(refreshable, sessionTransport, new VSession(user.getUsername()), () ->
-                            setNewCsrfToken(checkHeader, () ->
-                                    extractRequestContext(ctx ->
-                                            onSuccess(() -> ctx.completeWith(HttpResponse.create()), routeResult ->
-                                                    complete(successResponse())
-                                            )
-                                    )
-                            )
+                    CompletionStage<AuthRequestUserResult> authRequestUserResultCS = PatternsCS
+                         .ask(authManager, new AuthRequestUser(mesageIdGenerator.getId(), user), timeout)
+                         .thenApply(obj -> (AuthRequestUserResult) obj);
+
+                    return onSuccess(() -> authRequestUserResultCS,
+                            authRequestUserResult -> {
+                            if (authRequestUserResult.getResult()) {
+                                return
+                                    setSession(refreshable, sessionTransport, new VSession(user.getUsername()), () ->
+                                        setNewCsrfToken(checkHeader, () ->
+                                                extractRequestContext(ctx ->
+                                                        onSuccess(() -> ctx.completeWith(HttpResponse.create()), routeResult ->
+                                                                complete(successResponse())
+                                                        )
+                                                )
+                                        )
+                                );
+                            } else {
+                                return complete(unsuccessfulResponse());
+                            }
+                         }
                     );
              });
     }
@@ -176,6 +194,9 @@ public class Router extends HttpSessionAwareDirectives<VSession> {
 
     private String successResponse() {
         return "{\"result\" : \"success\" }";
+    }
+    private String unsuccessfulResponse() {
+            return "{\"result\" : \"false\" }";
     }
 
 }

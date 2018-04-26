@@ -11,9 +11,7 @@ import static akka.japi.pf.UnitMatch.match;
  * Created by dshelygin on 20.04.2018.
  */
 public class Register extends AbstractActor {
-
     final static Logger logger = Logger.getLogger(Register.class);
-
     static public Props props() {
         return Props.create(Register.class, () -> new Register());
     }

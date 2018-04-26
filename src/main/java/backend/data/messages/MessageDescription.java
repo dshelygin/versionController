@@ -4,7 +4,7 @@ import akka.actor.ActorRef;
 import backend.data.messages.VersionMessages;
 
 /**
- * Created by dshelygin on 20.04.2018.
+ *  данные об отправленном сообшщении, используются для отправки ответа, повтороной пересыли и.т.д
  */
 public class MessageDescription {
     private final VersionMessages message;
